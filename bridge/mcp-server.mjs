@@ -12,9 +12,9 @@ const port=Number(process.env.MAX_BRIDGE_PORT||8711);
 const str={type:'string'}; const num={type:'number'}; const atoms={type:'array',items:{type:['string','number']},maxItems:64};
 const common={session:str,scope:{type:'array',items:str,maxItems:12}};
 const definitions=[
-  ['max_status','Read the bridge session. No patch mutation.',{},[],true],
-  ['max_inspect','Read objects, values and connections in the explicit patch scope.',{...common},['session'],true],
-  ['max_create','Create one named Max object at coordinates. Does not turn DSP on.',{...common,name:str,object:str,args:atoms,x:num,y:num},['session','name','object','args','x','y']],
+  ['max_status','Read session, pending operations and recent request outcomes. No patch mutation.',{},[],true],
+  ['max_inspect','Read graph IDs and a single-use revision. Also reconciles expired pending requests after successful readback.',{...common},['session'],true],
+  ['max_create','Create one named Max object at coordinates. Object initialization may have side effects.',{...common,name:str,object:str,args:atoms,x:num,y:num},['session','name','object','args','x','y']],
   ['max_connect','Connect named objects and verify the actual patchcord.',{...common,source:str,outlet:{type:'integer',minimum:0},destination:str,inlet:{type:'integer',minimum:0}},['session','source','outlet','destination','inlet']],
   ['max_disconnect','Disconnect a specific patchcord and verify it.',{...common,source:str,outlet:{type:'integer',minimum:0},destination:str,inlet:{type:'integer',minimum:0}},['session','source','outlet','destination','inlet']],
   ['max_move','Move one object, preserving its dimensions.',{...common,name:str,x:num,y:num},['session','name','x','y']],
@@ -23,6 +23,9 @@ const definitions=[
   ['max_remove','Remove an object created by this receiver session, including its cords.',{...common,name:str},['session','name']],
   ['max_reference','Read installed Max XML reference with source path and checksum.',{name:str,domain:str},['name'],true]
 ];
+for(const definition of definitions) {
+  if(!definition[4]) {definition[2].expectedRevision=str;definition[3].push('expectedRevision');}
+}
 export const tools=definitions.map(([name,description,properties,required,readOnlyHint=false])=>({name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint,destructiveHint:!readOnlyHint,openWorldHint:false}}));
 function validateArgs(schema,a) {
   if(!a || typeof a!=='object'||Array.isArray(a)) throw Error('Arguments must be an object');
@@ -52,12 +55,15 @@ export async function callTool(name,args={}) {
   catch {throw Error('Max bridge is offline. Open max-control.maxpat in Max and start its node.script.');}
   if(state.port!==port)throw Error('Bridge state port mismatch');
   const status=name==='max_status';
-  const response=await fetch(`http://127.0.0.1:${port}/${status?'status':'call'}`,{
+  if(!status && state.version!=='0.2.0')throw Error('Bridge version mismatch: stop the Max bridge, update all bridge files and restart it before editing.');
+  const requestId=crypto.randomUUID();
+  let response;
+  try {response=await fetch(`http://127.0.0.1:${port}/${status?'status':'call'}`,{
     method:status?'GET':'POST',headers:{Authorization:`Bearer ${state.token}`,'Content-Type':'application/json'},
-    ...(status?{}:{body:JSON.stringify({id:crypto.randomUUID(),session:args.session,method:name.replace('max_',''),args})}),signal:AbortSignal.timeout(10000)
-  });
+    ...(status?{}:{body:JSON.stringify({id:requestId,session:args.session,method:name.replace('max_',''),args})}),signal:AbortSignal.timeout(10000)
+  });} catch(e) {throw Error(`Request ${requestId}: transport failed; outcome unknown. Read max_status and max_inspect before any retry. ${e.message}`);}
   const result=await response.json();
-  if(!response.ok||result.ok===false)throw Error(result.error||`Bridge HTTP ${response.status}`);
+  if(!response.ok||result.ok===false)throw Error(`Request ${requestId}: ${result.error||`Bridge HTTP ${response.status}`}`);
   return result;
 }
 export async function rpc(message) {
@@ -69,7 +75,7 @@ export async function rpc(message) {
     if(message.method==='initialize') {
       const supported=['2024-11-05','2025-03-26','2025-06-18','2025-11-25'];
       const requested=message.params?.protocolVersion;
-      result={protocolVersion:supported.includes(requested)?requested:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'max-windows',version:'0.1.0'}};
+      result={protocolVersion:supported.includes(requested)?requested:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'max-windows',version:'0.2.0'}};
     } else if(message.method==='ping')result={};
     else if(message.method==='tools/list')result={tools};
     else if(message.method==='tools/call') {

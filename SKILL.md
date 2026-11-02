@@ -17,7 +17,7 @@ Consult [Windows and object lookup](references/windows.md) for paths, port metad
 
 ## Choose the execution route
 
-- **Connected live patch:** call `max_status`, then `max_inspect`. Use the returned session ID in every mutation. Read [live control](references/live-control.md). No tool availability means no live connection; never invent MCP calls.
+- **Connected live patch:** call `max_status`, then `max_inspect`. Use the returned session ID in every mutation. Before each mutation, inspect its scope and pass the returned `revision` as `expectedRevision`; reconsider the action if state changed. Never silently refresh a rejected precondition and replay the same write. Read [live control](references/live-control.md). No tool availability means no live connection; never invent MCP calls.
 - **Files:** read the complete target JSON and dependencies before editing. Keep unknown fields, object IDs, patchline order, varnames and presentation attributes. Write a new file or a backup before replacing an existing one. Never overwrite an unsaved open patch from disk.
 - **Documentation:** query local `.maxref.xml`, `.maxhelp`, `.maxsnip` and examples for the installed version. Use Cycling '74 online reference if the local material is incomplete. A local XML placeholder such as TEXT_HERE is missing evidence, not a fact.
 

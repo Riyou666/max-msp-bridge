@@ -3,6 +3,28 @@ autowatch = 1;
 inlets = 1;
 outlets = 1;
 var managed = {};
+var identities = [];
+var nextIdentity = 0;
+var snapshots = {};
+var nextSnapshot = 0;
+var epoch = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+function identity(o) {
+    identities = identities.filter(function(e){return e.object.valid;});
+    for(var i=0;i<identities.length;i++) if(identities[i].object === o) return identities[i].id;
+    var id = epoch + ':o' + (++nextIdentity);
+    identities.push({object:o,id:id}); return id;
+}
+function fingerprint(state) {
+    return JSON.stringify({name:state.name,filepath:state.filepath,locked:state.locked,
+        objects:state.objects.map(function(o){var c=Object.assign({},o);delete c.selected;return c;}).sort(function(a,b){return a.id.localeCompare(b.id);}),
+        connections:state.connections.slice().sort(function(a,b){return JSON.stringify(a).localeCompare(JSON.stringify(b));})});
+}
+function checkpoint(p,scope) {
+    var state=inspect(p), token=epoch+':r'+(++nextSnapshot);
+    snapshots[token]={scope:JSON.stringify(scope),fingerprint:fingerprint(state)};
+    var keys=Object.keys(snapshots);if(keys.length>64)delete snapshots[keys[0]];
+    state.revision=token;return state;
+}
 
 function fail(message) { throw new Error(message); }
 function safe(fn) { try { return fn(); } catch (_) { return null; } }
@@ -23,7 +45,7 @@ function scopeOf(root, scope) {
     return p;
 }
 function describe(o) {
-    return {varname:o.varname || null, maxclass:o.maxclass, text:safe(function(){return o.boxtext;}),
+    return {id:identity(o),varname:o.varname || null, maxclass:o.maxclass, text:safe(function(){return o.boxtext;}),
         rect:safe(function(){return o.rect;}), value:safe(function(){return o.getvalueof();}),
         selected:safe(function(){return o.selected;}),
         numinlets:safe(function(){return o.getboxattr('numinlets');}),
@@ -36,7 +58,7 @@ function cords(p) {
         if (!c || !c.outputs) continue;
         for(var i=0;i<c.outputs.length;i++) {
             var x=c.outputs[i];
-            result.push({source:x.srcobject.varname || null,outlet:x.srcoutlet,
+            result.push({sourceId:identity(x.srcobject),destinationId:identity(x.dstobject),source:x.srcobject.varname || null,outlet:x.srcoutlet,
                 destination:x.dstobject.varname || null,inlet:x.dstinlet});
         }
     }
@@ -51,7 +73,11 @@ function inspect(p) {
 function matchCord(c,a) {return c.source===a.source && c.outlet===a.outlet && c.destination===a.destination && c.inlet===a.inlet;}
 function execute(root, method, a) {
     var p=scopeOf(root,a.scope || []), o, key=JSON.stringify(a.scope||[])+'/'+a.name;
-    if(method==='inspect') return inspect(p);
+    if(method==='inspect') return checkpoint(p,a.scope||[]);
+    var snapshot=snapshots[a.expectedRevision];
+    if(!snapshot || snapshot.scope!==JSON.stringify(a.scope||[]) || snapshot.fingerprint!==fingerprint(inspect(p)))
+        fail('State conflict: inspect this scope and reconsider the change before retrying');
+    delete snapshots[a.expectedRevision]; // A mutation attempt consumes its precondition, including failures.
     if(method==='create') {
         if(!nameOK(a.name)) fail('Invalid varname');
         if(p.getnamed(a.name)) fail('Name already exists; inspect before retrying');
@@ -60,7 +86,7 @@ function execute(root, method, a) {
         if(!Array.isArray(a.args)||a.args.length>64||a.args.some(function(x){return !(typeof x==='string'||typeof x==='number');})) fail('args must contain atoms');
         o=p.newdefault.apply(p,[a.x,a.y,a.object].concat(a.args));
         if(!o || !o.valid || o.maxclass==='bogus') {if(o&&o.valid)p.remove(o);fail('Max could not instantiate object');}
-        o.varname=a.name; managed[key]=true;
+        o.varname=a.name; managed[key]=o;
         return describe(o);
     }
     if(method==='connect'||method==='disconnect') {
@@ -88,7 +114,7 @@ function execute(root, method, a) {
         o.message.apply(o,[a.selector].concat(a.args));return describe(o);
     }
     if(method==='remove') {
-        if(!managed[key]) fail('This minimal bridge only removes objects it created in this receiver session');
+        if(!managed[key] || !managed[key].valid || managed[key] !== o) fail('This minimal bridge only removes objects it created in this receiver session');
         p.remove(o);delete managed[key];return {removed:a.name};
     }
     fail('Unknown operation');
@@ -97,7 +123,7 @@ function request(text) {
     var req;
     try {
         req=JSON.parse(text);
-        if(Date.now()>req.deadline) fail('Expired request was not executed');
+        if(!Number.isFinite(req.deadline) || Date.now()>req.deadline) fail('Expired request was not executed');
         var value=execute(this.patcher,req.method,req.args);
         outlet(0,'response',JSON.stringify({id:req.id,ok:true,result:value}));
     } catch(e) {

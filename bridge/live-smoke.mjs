@@ -2,9 +2,12 @@
 import {spawn} from 'node:child_process';
 import readline from 'node:readline';
 import fs from 'node:fs';
+import path from 'node:path';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
-if(!process.argv.includes('--demo'))throw Error('Requires --demo; this test creates objects in scope workspace.');
+const patchArg=process.argv.indexOf('--patch');
+if(!process.argv.includes('--demo') || patchArg<0 || !process.argv[patchArg+1])throw Error('Requires --demo --patch <absolute test patch path>; creates objects only in the verified demo.');
+const expectedPatch=path.resolve(process.argv[patchArg+1]).replaceAll('\\','/').toLowerCase();
 const child=spawn(process.execPath,[fileURLToPath(new URL('./mcp-server.mjs',import.meta.url))],{stdio:['pipe','pipe','inherit'],windowsHide:true});
 let next=0;const pending=new Map();const evidence=[];
 readline.createInterface({input:child.stdout}).on('line',line=>{
@@ -15,6 +18,10 @@ function request(method,params){const id=++next;return new Promise((resolve,reje
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');
 });}
 async function tool(name,args={}){
+  if(!['max_status','max_inspect','max_reference'].includes(name)) {
+    const snapshot=await tool('max_inspect',{session:args.session,scope:args.scope});
+    args={...args,expectedRevision:snapshot.result.revision};
+  }
   const response=await request('tools/call',{name,arguments:args});
   if(response.error||response.result?.isError)throw Error(JSON.stringify(response));
   const result=JSON.parse(response.result.content[0].text);evidence.push({tool:name,args,result});return result;
@@ -24,6 +31,8 @@ try {
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
   assert.equal((await request('tools/list',{})).result.tools.length,10);
   const {session}=await tool('max_status');const context={session,scope:['workspace']};
+  const root=await tool('max_inspect',{session});
+  assert.equal(path.resolve(root.result.filepath).replaceAll('\\','/').toLowerCase(),expectedPatch,'Wrong host patch; refusing mutation');
   const initial=await tool('max_inspect',context);
   assert.equal(initial.result.name,'codex_workspace');
   for(const name of ['demoInput','demoDouble','demoOutput','temporaryProbe'])assert.ok(!initial.result.objects.some(o=>o.varname===name),'Demo name already exists; refusing duplicate run');
@@ -48,9 +57,15 @@ try {
   assert.equal(state.result.connections.length,2);
   const stale=await request('tools/call',{name:'max_create',arguments:{...context,session:'stale',name:'mustNotExist',object:'number',args:[],x:0,y:0}});
   assert.equal(stale.result.isError,true);
-  const protectedRemoval=await request('tools/call',{name:'max_remove',arguments:{...context,name:'workspaceLabel'}});
+  const protectedSnapshot=await tool('max_inspect',context);
+  const protectedRemoval=await request('tools/call',{name:'max_remove',arguments:{...context,expectedRevision:protectedSnapshot.result.revision,name:'workspaceLabel'}});
   assert.equal(protectedRemoval.result.isError,true);
   state=await tool('max_inspect',context);assert.ok(!state.result.objects.some(o=>o.varname==='mustNotExist'));
+  const staleRevision=state.result.revision;
+  await tool('max_move',{...context,name:'demoOutput',x:100,y:310});
+  const conflict=await request('tools/call',{name:'max_setvalue',arguments:{...context,name:'demoInput',value:999,expectedRevision:staleRevision}});
+  assert.equal(conflict.result.isError,true);assert.match(conflict.result.content[0].text,/State conflict/);
+  state=await tool('max_inspect',context);assert.equal(Number(value()),42);
   const report={date:new Date().toISOString(),passed:true,transport:'MCP stdio → HTTP → Max node.script → v8',audioTested:false,evidence};
   if(process.env.MAX_TEST_REPORT)fs.writeFileSync(process.env.MAX_TEST_REPORT,JSON.stringify(report,null,2));
   console.log(JSON.stringify({passed:true,operations:evidence.length,controlResult:'21 * 2 = 42',connections:state.result.connections,audioTested:false},null,2));

@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
-import {rpc,tools} from './mcp-server.mjs';
+import os from 'node:os';
+import path from 'node:path';
+import {rpc,tools,callTool} from './mcp-server.mjs';
 import {validate} from '../scripts/maxpat.mjs';
 
 test('MCP initialization, tool discovery, notifications and unknown method',async()=>{
@@ -32,4 +34,17 @@ test('receiver rejects expired requests without touching patcher',()=>{
   vm.createContext(context);vm.runInContext(fs.readFileSync(new URL('./max-receiver.js',import.meta.url),'utf8'),context);
   context.request(JSON.stringify({id:'old',method:'create',args:{},deadline:0}));
   assert.equal(reply.ok,false);assert.match(reply.error,/Expired/);
+});
+
+test('mixed old bridge and new client rejects writes before network access',async()=>{
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'max-version-test-'));
+  const previous=process.env.MAX_BRIDGE_STATE;
+  try {
+    process.env.MAX_BRIDGE_STATE=path.join(folder,'state.json');
+    fs.writeFileSync(process.env.MAX_BRIDGE_STATE,JSON.stringify({port:Number(process.env.MAX_BRIDGE_PORT||8711),session:'test',token:'fake-test-token'}));
+    await assert.rejects(()=>callTool('max_move',{session:'test',name:'a',x:0,y:0,expectedRevision:'old'}),/version mismatch/);
+  } finally {
+    if(previous===undefined)delete process.env.MAX_BRIDGE_STATE;else process.env.MAX_BRIDGE_STATE=previous;
+    fs.rmSync(folder,{recursive:true});
+  }
 });

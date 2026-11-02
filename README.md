@@ -44,17 +44,23 @@ Back up the project, then copy the complete bridge wiring from the generated hos
 
 `max_status`, `max_inspect`, `max_create`, `max_connect`, `max_disconnect`, `max_move`, `max_setvalue`, `max_send`, `max_remove`, `max_reference`.
 
-Mutations require named objects, explicit scope and a current session. Removal is limited to objects created in that receiver session. There is no general eval, transactional undo, save endpoint, global console capture or audio analyzer. UI interaction may still be needed for actions outside these tools. Live audio/DSP correctness is a separate check.
+Version 0.2.0: mutations require named objects, a current session, and the latest inspection revision for the selected scope (`expectedRevision`). A changed inspected state rejects the write. Default scope is the host root; explicitly select your intended subpatcher. Removal is limited to actual object instances created in that receiver session; a same-name replacement is protected. There is no general eval, transactional undo, save endpoint, global console capture or audio analyzer. UI interaction may still be needed for actions outside these tools. Live audio/DSP correctness is a separate check.
 
 The service binds to loopback, uses a per-start token and serializes requests. This is a local same-user bridge, not a sandbox for arbitrary Max objects or a remote service. No runtime credentials or generated machine-specific patches are bundled.
 
 ## Validation
 
 ```powershell
-node --test bridge/bridge.test.mjs
+node --test bridge/*.test.mjs
 node scripts/maxpat.mjs validate '<your-patch.maxpat>'
 ```
 
 The structural validator does not establish object availability or audio correctness. A local live acceptance run verified `21 * 2 = 42`, connection changes, scoped removal, stale-session rejection, and saved graph persistence after reopening. Audio output was not enabled or auditioned.
 
 See [live control](references/live-control.md), [Windows setup](references/windows.md), and [research and provenance](references/research.md). Architecture was informed by MAX-MSP_CC_Framework, MaxMCP and tdmcp; this is an independent implementation, not their Windows distribution.
+
+## Updating from 0.1.0
+
+Stop the bridge before replacing files. Back up the installed skill, then replace its `SKILL.md`, `agents`, `bridge`, `references`, and `scripts` from this repository. Keep your existing Codex registration. Restart the Max bridge and reload Codex MCP; check `max_status.version` is `0.2.0`. Mixing a new receiver with an old MCP client will reject writes because revisions are now mandatory. The fresh-install script intentionally refuses existing installations.
+
+0.2.0 adds runtime graph IDs, object-identity removal guards, single-use state preconditions, and timeout recovery through explicit readback. It does not add transactional undo, audio verification or fully concurrent collaborative editing. See [failure semantics](references/live-control.md#failure-semantics).
