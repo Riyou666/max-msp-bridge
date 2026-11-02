@@ -21,6 +21,8 @@ For a live upgrade from a repository checkout, use `scripts/upgrade-live.mjs --a
 
 Identify the target file or bridge session, Max version, standalone versus Max for Live, and requested change. Preserve the user's layout and working signal paths. Clarify only missing choices that materially affect the result.
 
+For patch creation, grouping, rewiring, novice-facing controls, diagnostics or undo, read [artist workflow](references/artist-workflow.md). Respect the user's choice of layout and encapsulation. Inspect and edit nested patchers in the background without automatically opening their windows; users can open internals themselves. Verify the connected project automatically; if user action is needed, use an asynchronous reply card when available and continue independent work.
+
 Run `scripts/probe-max.ps1 -MaxRoot '<installation directory>'` to discover executable/version, resource directories and redirected Documents location. Without an argument it checks running Max, MAX_ROOT, registry installs and standard locations. If none match, ask for the install directory; do not recursively scan all drives.
 
 Consult [Windows and object lookup](references/windows.md) for paths, port metadata and script commands. Read [domain guidance](references/domains.md) only for relevant DSP, JS, Gen, M4L or external work.

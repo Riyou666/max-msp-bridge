@@ -1,143 +1,201 @@
-# Max/MSP Windows skill + MCP bridge
+# Max/MSP Bridge for Codex
 
-Let Codex inspect, create, connect and modify Max patches on Windows through Max's native APIs, with live readback. Supported bridge operations do not require Computer Use. You can continue working in Max; take turns when editing the same area and read the current state before changes.
+[![Tests](https://github.com/Riyou666/max-msp-bridge/actions/workflows/test.yml/badge.svg)](https://github.com/Riyou666/max-msp-bridge/actions/workflows/test.yml)
 
-An original Codex skill and local MCP bridge for Max on Windows. No Claude Code, macOS external, npm dependencies or API key required.
+**Connect Codex to Max/MSP on Windows to inspect, edit, and debug patches through native APIs.**
 
-## Requirements
+A local MCP bridge with a companion Codex skill. Supported operations do not require screenshots, mouse control or opening every subpatcher window.
 
-- Windows, Max 9 with `v8` and Node for Max.
-- Node.js 20+ and PowerShell 7 (`node` and `pwsh` on PATH).
-- Codex with MCP support.
+- **Bridge:** connects Codex to a Max patch for native inspection, object creation, wiring, supported edits and background diagnostics.
+- **Skill:** guides Codex in planning signal paths, respecting your layout, checking the target, diagnosing problems and keeping supported changes recoverable. The skill provides working instructions; it does not add bridge endpoints.
 
-Tested on Windows x64 with Max 9.2.0 and Node 24.14.1. Other versions have not been verified.
+Keep working in Max, choose your own patch organization, and ask for help where you need it. Take turns when editing the same area.
 
-## Install
+[Get started](#get-started-with-codex) · [Connect a project](#connect-your-project) · [Examples](#try-it) · [Troubleshooting](#troubleshooting) · [Limitations](#current-limitations)
 
-Clone this repository, then run from its root in PowerShell 7. Replace the example Max path with the directory containing your `Max.exe`:
+## Get started with Codex
 
-```powershell
-git clone https://github.com/Riyou666/max-msp-windows.git
-cd max-msp-windows
-./scripts/install.ps1 -MaxRoot 'E:\Applications\Max 9'
+**Already using Codex? Copy this prompt into your chat:**
+
+```text
+Install https://github.com/Riyou666/max-msp-bridge for me.
+
+Read its README and check Windows, Max 9, Node.js 20+ and PowerShell 7.
+Find my Max installation and preserve my existing Codex configuration.
+If the skill or MCP registration already exists, compare versions and
+back it up rather than creating a duplicate or overwriting it blindly.
+
+Install the skill and register the max_windows MCP server. Create a
+separate blank bridge-enabled test patch without overwriting my files.
+Tell me when I need to open it in Max or reload Codex's MCP connection.
+
+Verify the exact connected file and workspace. In the test workspace,
+create a number input -> * 2 -> number output, send 21, and read back 42.
+Do not enable audio or modify my existing creative projects.
 ```
 
-The installer copies the skill into `$HOME\.codex\skills\max-msp-windows`, backs up an existing Codex config, and adds `mcp_servers.max_windows`. Existing skill installations or registrations stop installation for manual comparison. It does not change Windows execution policy.
+Codex needs local file and command access. It can perform the supported setup steps and identify missing prerequisites. You may need to open the generated patch in Max, reload MCP, or respond to local permission prompts. Sending a link alone does not connect an arbitrary open patch.
 
-Generate a host patch with paths to the installed bridge:
+**Success looks like:** Codex reports the intended patch's full path, inspects its workspace, and reads back **42**. This verifies control and wiring, not audio output.
+
+### Requirements
+
+| Component | Requirement |
+| --- | --- |
+| Platform | Windows |
+| Max | Max 9 with `v8` and Node for Max |
+| Runtime | Node.js 20+ and PowerShell 7 (`node` and `pwsh` on PATH) |
+| Client | Codex with MCP support and local file/command access |
+
+Live testing has been performed on Windows x64 with Max 9.2.0 and Node 24.14.1. Other Max versions have not been verified. The bridge requires no separate API key or npm dependencies; normal Codex access is still required.
+
+<details>
+<summary>Prefer to install manually? Expand the PowerShell instructions.</summary>
+
+Run in PowerShell 7. Git is needed for the clone command. Replace the Max path with the directory containing your `Max.exe`:
 
 ```powershell
+git clone https://github.com/Riyou666/max-msp-bridge.git
+cd max-msp-bridge
+./scripts/install.ps1 -MaxRoot 'E:\Applications\Max 9'
 node "$HOME\.codex\skills\max-msp-windows\scripts\prepare-demo.mjs" "$PWD\max-control.maxpat"
 ```
 
-Open that patch in Max, restart/reload Codex's MCP connection, then ask:
+The installer copies the skill into `$HOME\.codex\skills\max-msp-windows`, backs up an existing Codex config, and adds `mcp_servers.max_windows`. It refuses an existing installation or registration so it can be compared before replacement. It does not change Windows execution policy. The generator refuses to overwrite files.
 
-> Use max-msp-windows to check the current bridge. In the workspace subpatcher, create a number input → * 2 → number output, send 21, and read back the output to confirm 42.
+Open `max-control.maxpat` in Max, reload Codex's MCP connection, and ask Codex to perform the **21 → ×2 → 42** check above. Save in Max to retain live edits.
 
-The generator refuses to overwrite an existing file. Save your patch in Max to persist edits.
+</details>
 
-## Connecting your projects
+## Connect your project
 
-**Install once; add the bridge to each patch you want to control live.** Reopening a saved patch that contains the bridge normally starts it automatically. You do not need to edit Codex's `config.toml` for every project or keep the demo open. Opening a patch without the bridge does not connect it, and switching the frontmost window does not change the control target.
+**Install once. Add the bridge to each project you want to control.** You do not need to edit `config.toml` every time or keep the demo open.
 
-### First installation with Codex
+### Starting a new project
 
-Send Codex the repository link and this prompt:
-
-> Read the README at https://github.com/Riyou666/max-msp-windows, check Windows, Max 9, Node.js and PowerShell 7, then install the skill and MCP bridge. Preserve my existing Codex configuration. If an installation already exists, back it up and compare versions instead of installing a duplicate. Generate a separate test patch and verify that the bridge connects to that exact file. Explain any steps I need to take to reload MCP or open Max.
-
-This prompt requests assistance; it does not guarantee unattended installation in every environment. Codex needs access to local files and command execution. You may still need to open Max or respond to permission prompts.
-
-### New projects: start with a bridge-enabled patch
-
-After installation, run this in PowerShell 7. Replace the output path with your project location. The directory must already exist and the destination file must not exist:
-
-```powershell
-node "$HOME\.codex\skills\max-msp-windows\scripts\prepare-demo.mjs" 'E:\MyMaxProjects\Assignment01.maxpat'
+```text
+Use max-msp-windows to create a blank bridge-enabled project at
+<full-path-to-new-project.maxpat>. Preserve existing files and leave
+audio off. Help me connect it, verify its exact path, and use its
+workspace subpatcher as the working area.
 ```
 
-1. Stop any bridge running in another patch, then open the generated file in Max.
-2. Double-click `p codex_workspace` and build your project inside it. This is a blank workspace; it does not generate assignment content.
-3. Ask Codex to check the connection, confirm the host patch's full path and workspace, then begin assisting.
-4. Save the project in Max. Next time, open this project directly; there is no need to generate the bridge again.
+The destination directory must exist. Open the generated patch when instructed. Save it in Max; reopening that saved project normally starts its bridge automatically.
 
-Alternatively, ask Codex:
+### Connecting an existing project
 
-> Use the installed max-msp-windows skill to create a blank bridge-enabled project at `<full-path-to-new-project.maxpat>`. Do not overwrite an existing file, generate creative content or enable audio. Verify that the bridge connects to this file and use the workspace subpatcher as the working area.
+```text
+Add only the max-msp-windows bridge to <full-path-to-project.maxpat>.
+The patch is <open/closed> and has <saved/unsaved> changes.
+Check for an existing bridge and make a backup first. Preserve my
+objects, connections, layout and audio logic. Never overwrite unsaved
+live work from disk; prepare a separate copy if needed. Verify the
+connected filepath and scope before making creative changes.
+```
 
-If you have already created a patch or started working in it, follow the existing-project instructions below. Do not overwrite it with the generator.
+The bridge controls its host patch and child scopes. Changing the frontmost Max window does not change that target. Only one bridge can use the default port, `8711`, at a time; stop the old bridge before starting another. Other Max windows may remain open.
 
-### Existing projects: connect once, save and reuse
+For exact manual steps, reopening, sharing and upgrades, see [Project setup and updates](references/project-setup.md).
 
-Codex can help add the bridge. Provide the full file path, whether it is open in Max, and whether it has unsaved changes:
+## Try it
 
-> Add only the max-msp-windows bridge to `<full-path-to-existing-project.maxpat>`. Its current open/save state is: `<describe state>`. Check for an existing bridge and make a backup first. Preserve existing objects, connections, layout and audio logic; do not complete the project for me. Never overwrite an open patch with unsaved edits from disk; prepare a separate copy if needed. Verify the connected file path and scope afterward.
+**Diagnose a silent patch**
 
-**There is currently no one-click interface that automatically takes control of any open project.** Depending on the file's state, Codex can prepare a separate copy with the bridge without overwriting an open unsaved patch. These setup actions cannot be performed automatically by an MCP bridge that is not yet connected to the target.
+> Check this project's connection, Console, audio status and signal path. Explain where the sound stops before changing anything.
 
-To connect a project manually:
+**Fix one part**
 
-1. Save and back up the target project. Check whether it already contains a bridge to avoid duplicates.
-2. Generate a temporary demo host, open it and click `script stop`. Stop any other bridge using the same port too.
-3. In Max's unlocked editing mode, copy **the five objects `script start`, `script stop`, `node.script …`, `v8 …` and `print max-bridge-status`, together with their interconnecting patchcords**, into an empty area at the target patch's top level. Preserve the script paths, autostart attributes and `__maxbridge_` object names. You do not need to copy the example `workspace` subpatcher or change your existing musical connections.
-4. Check that the copied bridge has started. If it has not, click the target patch's `script start` in locked mode. Save the target project.
-5. Ask Codex to inspect the root scope `[]` and confirm the file path first. Existing projects may not contain a subpatcher named `workspace`. Use each subpatcher's actual scripting name (varname) when selecting a scope.
+> Connect this player's stereo outputs to the mixer. Preserve the rest of the patch and verify both channels afterward.
 
-The receiver controls the patch containing it and that patch's child scopes. Placing the bridge inside a separate subpatcher does not give it access to the entire enclosing project.
+**Organize a module**
 
-### Reopening, switching projects and checking connections
+> Help encapsulate this section as a named subpatcher. Preserve its behavior and keep the internal windows closed while you work; I will double-click it when I want to look inside.
 
-- **Reopen a connected project:** the bridge normally starts automatically. If it fails, check Max Console for script-path or port errors, then use `script start`.
-- **Switch projects:** click `script stop` in the old project (or close the old bridge host), then open or start the target project. The default port is `8711`; only one bridge can run on a given port. Other Max windows without a bridge can remain open.
-- **After installing or updating:** reload Codex MCP or restart Codex. Routine project switching usually does not require restarting Codex, but it does require reading a new session. Do not reuse the previous project's session or revision.
-- **Verify the target:** ask Codex to call `max_status`, then use the returned session to call `max_inspect` at the root scope and check `filepath`. A working connection does not prove it points to the intended file.
-- **Move to another computer or share a project:** generated patches contain absolute paths to the local bridge scripts. Each recipient must install the skill and reconnect the patch or update both script paths for their own computer.
+**Keep a project approachable**
 
-### Debugging assistance without completing your assignment
+> Build the simplest version of this idea first. Give me clearly labeled start, stop and volume controls, and explain what I can adjust.
 
-You can set this working agreement at the start of a project:
+Requests may combine file preparation and live operations depending on available tools. Codex should explain when an operation is unsupported instead of switching to desktop automation.
 
-> This is my assignment, and I will design and build it myself. Act only as a debugging assistant: confirm the bridge and file path first without making changes. Explain causes and offer hints when I encounter a problem. Modify only the specified part when I explicitly ask you to fix it; do not expand the work into a completed assignment.
+## Bridge: native patch control
 
-You can continue using Max. While Codex modifies an area, pause your edits there. Codex should inspect the current state first and reassess any conflict. Save changes in Max afterward; the bridge has no save endpoint.
+| Task | Tools |
+| --- | --- |
+| Verify connections and inspect graphs | `max_status`, `max_inspect` |
+| Create, wire, disconnect and move objects | `max_create`, `max_connect`, `max_disconnect`, `max_move` |
+| Set values and send supported messages | `max_setvalue`, `max_send` |
+| Remove objects created by the current receiver session | `max_remove` |
+| Look up installed Max references | `max_reference` |
+| Read Console history, exposed preferences and audio settings | `max_console`, `max_preferences`, `max_audio_status` |
+| Change explicitly requested supported audio settings | `max_audio_set` |
+| Restart the bridge through Max APIs | `max_bridge_restart` |
 
-## Tools and boundaries
+Unnamed objects can be addressed by runtime IDs. Mutations require a current session and inspection revision; IDs and revisions expire when the receiver reloads. See [Live control](references/live-control.md) for arguments and failure handling.
 
-`max_status`, `max_inspect`, `max_create`, `max_connect`, `max_disconnect`, `max_move`, `max_setvalue`, `max_send`, `max_remove`, `max_reference`, `max_console`, `max_preferences`, `max_audio_status`, `max_audio_set`, `max_bridge_restart`.
+```mermaid
+flowchart LR
+    C[Codex + skill] --> M[MCP client]
+    M --> B[Authenticated local bridge]
+    B --> P[Max native patcher APIs]
+    P --> R[Graph and diagnostic readback]
+    R --> C
+```
 
-Version 0.3.0: mutations accept runtime object IDs or unique existing varnames and require a current session, and the latest inspection revision for the selected scope (`expectedRevision`). A changed inspected state rejects the write. Default scope is the host root; explicitly select your intended subpatcher. Removal is limited to actual object instances created in that receiver session; a same-name replacement is protected. There is no general eval, transactional undo, save endpoint or audio analyzer. Unsupported operations are reported explicitly; the skill does not fall back to Computer Use. Live audio/DSP correctness is a separate check.
+## Skill: working together
 
-The service binds to loopback, uses a per-start token and serializes requests. Created objects carry an ownership marker in their annotation; existing user objects are not renamed or annotated. This is a local same-user bridge, not a sandbox for arbitrary Max objects or a remote service. No runtime credentials or generated machine-specific patches are bundled.
+The [skill instructions](SKILL.md) and [artist workflow](references/artist-workflow.md) guide how Codex works:
 
-## Validation
+- **Confirm the target automatically.** Check the session, filepath and scope before editing. If setup needs your help, use a reply card when the client supports it and continue independent checks while waiting.
+- **Respect your organization.** Colored groups, subpatchers, nested modules and embedded interfaces are personal choices. Background inspection should not open a stack of internal windows.
+- **Keep edits recoverable.** Retain backups or before/after records and supported inverse operations. Preserve later edits when undoing a change. This is a workflow, not a built-in universal undo engine.
+- **Keep controls understandable.** Use meaningful labels, units and ranges. New sound-producing patches start muted; audio hardware is not enabled automatically.
+
+Pause your own edits in the area Codex is modifying. Revision checks help detect conflicts but do not provide simultaneous collaborative editing. **Save in Max to persist live changes.**
+
+## Troubleshooting
+
+| Symptom | Next step |
+| --- | --- |
+| Codex cannot see `max_windows` tools | Confirm installation and reload the MCP connection. |
+| Bridge is offline | Confirm the intended host is open and its bridge is started; inspect script paths and port errors. |
+| Connection points to the wrong project | Stop the old bridge, start the intended one, and verify `filepath` again. |
+| A patch opens but does not connect | Check whether it contains the bridge. Opening an ordinary patch is not enough. |
+| A write is rejected | Inspect again and reassess intervening edits; do not blindly replay the write. |
+| A request times out | Its outcome may be unknown. Inspect before deciding whether another write is needed. |
+| The patch is silent | Check files, player state, routing, gain and audio status. A working bridge does not prove working audio. |
+| A shared project cannot find scripts | Bridge paths are machine-specific. Install locally and reconnect or update both script paths. |
+
+While connected, Codex can read the Console in the background. If disconnected, it can still inspect saved files and configuration, but cannot fetch live diagnostics through that connection.
+
+## Current limitations
+
+- No automatic attachment to every open project, unrestricted eval, save endpoint or transactional undo.
+- Removal is limited to objects created by the current receiver session. Existing objects cannot be deleted through that endpoint.
+- `max_send` supports restricted selectors, not every message understood by every Max object.
+- Console history is global and bounded. Preferences reads cover exposed attributes, not every Preferences control.
+- Audio setting changes are application-wide. Device selection and arbitrary preference writes are not supported.
+- No built-in audio analyzer. JSON validation and graph readback do not establish audible correctness.
+- The bridge binds to loopback and uses a per-start token. It is a local same-user service, not a sandbox for arbitrary Max objects or a remote access service.
+
+Unsupported operations are reported explicitly. The skill does not fall back to Computer Use.
+
+## Development and documentation
+
+Run from the repository root:
 
 ```powershell
 node --test
 node scripts/maxpat.mjs validate '<your-patch.maxpat>'
 ```
 
-The structural validator does not establish object availability or audio correctness. A local live acceptance run verified `21 * 2 = 42`, connection changes, scoped removal, stale-session rejection, and saved graph persistence after reopening. Audio output was not enabled or auditioned.
+The validator checks JSON graph structure, not object availability or DSP behavior. Report structural validation, native readback and audio testing separately.
 
-See [live control](references/live-control.md), [Windows setup](references/windows.md), and [research and provenance](references/research.md). Architecture was informed by MAX-MSP_CC_Framework, MaxMCP and tdmcp; this is an independent implementation, not their Windows distribution.
+- [Project setup and updates](references/project-setup.md) — connect, reopen, switch, share and upgrade.
+- [Artist workflow](references/artist-workflow.md) — layout choices, wiring, diagnosis and recoverable edits.
+- [Live control](references/live-control.md) — scopes, revisions, tools and failure semantics.
+- [Windows reference lookup](references/windows.md) — installed documentation and platform paths.
+- [Research and provenance](references/research.md) — design sources and implementation boundaries.
 
-## Background debugging (0.3.0)
+For a bug report, include Windows, Max and Node versions, the failing operation, expected behavior, and a minimal patch when possible. Remove bridge tokens, private paths and recordings before sharing. [Open an issue](https://github.com/Riyou666/max-msp-bridge/issues).
 
-Unnamed objects can now be connected, moved and sent supported messages through their runtime IDs. Read Console history with `max_console`, exposed application preferences with `max_preferences`, and audio status with `max_audio_status`. These calls do not open or manipulate windows. Console history is global; it may include messages from other projects.
-
-`max_audio_set` supports explicit changes to DSP on/off, sample rate, signal/I/O vector sizes, Overdrive, Scheduler in Audio Interrupt and CPU limit. It checks the prior value and reads back the result. Audio settings are application-wide. Device selection and arbitrary Preferences writes are not supported. The skill reports missing capabilities instead of silently switching to Computer Use.
-
-## Updating an existing live installation
-
-From a separate, updated repository checkout, run:
-
-```powershell
-node scripts/upgrade-live.mjs --apply --patch 'E:\MyMaxProjects\Assignment01.maxpat'
-```
-
-Use the exact path of the currently connected host. The updater checks that path, backs up the installed skill under `$HOME\.codex\backups\max-msp-windows`, replaces runtime files, waits for the receiver to reload, and restarts only the bridge through Max APIs. It does not close the project, edit its file, change Codex configuration, or use Computer Use. If the receiver does not reload or the bridge is disconnected, it reports the failure without automating the UI. The updater must run from a checkout separate from the installed skill.
-
-Reload Codex MCP after updating to discover the new tools. Verify `max_status.version` and `max_inspect.result.receiverVersion` are both `0.3.0`. Runtime object IDs and revision tokens from before the upgrade are invalid. Keep the backup until verification is complete.
-
-For a stopped installation, back it up and replace `SKILL.md`, `agents`, `bridge`, `references`, and `scripts` manually, then start the bridge. The fresh-install script intentionally refuses existing installations.
-
-See [live control and failure semantics](references/live-control.md) for exact tool arguments and limitations.
+Architecture was informed by [MAX-MSP_CC_Framework](https://github.com/taylorbrook/MAX-MSP_CC_Framework), [MaxMCP](https://github.com/signalcompose/MaxMCP) and [tdmcp](https://github.com/Pantani/tdmcp). This repository is an independent implementation.
