@@ -6,6 +6,7 @@ jobs:
   test:
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         node: [20, 22, 24]
     steps:
@@ -13,4 +14,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: node --test bridge/*.test.mjs
+      - run: node --test

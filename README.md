@@ -51,7 +51,7 @@ The service binds to loopback, uses a per-start token and serializes requests. T
 ## Validation
 
 ```powershell
-node --test bridge/*.test.mjs
+node --test
 node scripts/maxpat.mjs validate '<your-patch.maxpat>'
 ```
 
