@@ -5,22 +5,30 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {collectConsole}=require('./console-log.cjs');
 const port = Number(process.env.MAX_BRIDGE_PORT || 8711);
 const token = crypto.randomBytes(32).toString('hex');
 const session = crypto.randomUUID();
 const statePath = process.env.MAX_BRIDGE_STATE || path.join(process.platform==='win32'?path.join(os.homedir(),'AppData','Local','Temp'):os.tmpdir(), `codex-max-bridge-${port}.json`);
 const pending = new Map();
 const completed = new Map();
-const methods = new Set(['inspect','create','connect','disconnect','move','setvalue','send','remove']);
+const methods = new Set(['inspect','create','connect','disconnect','move','setvalue','send','remove','console','preferences','audio_status','audio_set','bridge_restart']);
 const respond = (res, status, data) => { if (!res.writableEnded) { res.writeHead(status, {'Content-Type':'application/json'}); res.end(JSON.stringify(data)); } };
 
-max.addHandler('response', text => {
+max.addHandler('response', async text => {
   try {
     const reply = JSON.parse(text);
     const p = pending.get(reply.id);
     if (!p) return;
-    clearTimeout(p.timer); pending.delete(reply.id);
+    clearTimeout(p.timer);
     const result = {...reply, session};
+    if(p.method==='console' && p.exportPath) {
+      try {
+        if(reply.ok)result.result=await collectConsole(p.exportPath,p.args);
+        else {try {fs.unlinkSync(p.exportPath);}catch {}}
+      } catch(e) {result.ok=false;result.error=e.message;}
+    }
+    pending.delete(reply.id);
     // A successful in-Max read after all older deadlines is a recovery barrier.
     // Old outcomes stay unknown; this is not a rollback or automatic retry.
     if(p.method==='inspect' && reply.ok) {
@@ -38,7 +46,7 @@ max.addHandler('response', text => {
 
 const server = http.createServer((req,res) => {
   if (req.headers.origin || req.headers.host !== `127.0.0.1:${port}` || req.headers.authorization !== `Bearer ${token}`) return respond(res,403,{error:'Forbidden'});
-  if (req.method === 'GET' && req.url === '/status') return respond(res,200,{session,port,bridge:'max-windows',version:'0.2.0',pending:Array.from(pending,([id,p])=>({id,method:p.method,timedOut:p.timedOut})),recent:Array.from(completed,([id,p])=>({id,ok:p.result.ok,error:p.result.error,reconciled:p.result.reconciled})).slice(-32)});
+  if (req.method === 'GET' && req.url === '/status') return respond(res,200,{session,port,bridge:'max-windows',version:'0.3.0',pending:Array.from(pending,([id,p])=>({id,method:p.method,timedOut:p.timedOut})),recent:Array.from(completed,([id,p])=>({id,ok:p.result.ok,error:p.result.error,reconciled:p.result.reconciled})).slice(-32)});
   if (req.method !== 'POST' || req.url !== '/call') return respond(res,404,{error:'Not found'});
   let body = ''; let oversized = false;
   req.on('data',chunk => { body += chunk; if (Buffer.byteLength(body) > 65536) { oversized = true; respond(res,413,{error:'Request too large'}); req.destroy(); } });
@@ -60,14 +68,16 @@ const server = http.createServer((req,res) => {
         const operation=pending.get(call.id); if(operation)operation.timedOut=true;
         respond(res,504,{error:'Max reply timed out; outcome unknown. Do not blindly retry.',session});
       },8000);
-      pending.set(call.id,{res,timer,body,method:call.method,deadline,timedOut:false});
+      const exportPath=call.method==='console'?path.join(os.tmpdir(),`codex-max-console-${crypto.randomUUID()}.txt`):null;
+      pending.set(call.id,{res,timer,body,method:call.method,args:call.args,exportPath,deadline,timedOut:false});
+      if(exportPath)call.args={...call.args,exportPath:exportPath.replaceAll('\\','/')};
       max.outlet('request', JSON.stringify({...call,deadline}));
     } catch (e) { respond(res,400,{error:e.message}); }
   });
 });
 server.on('error',e => max.post(`Max bridge failed: ${e.message}`));
 server.listen(port,'127.0.0.1',() => {
-  fs.writeFileSync(statePath,JSON.stringify({port,token,session,version:'0.2.0'}),{mode:0o600});
+  fs.writeFileSync(statePath,JSON.stringify({port,token,session,version:'0.3.0'}),{mode:0o600});
   max.post(`Max Windows bridge ready on 127.0.0.1:${port}; session ${session}`);
 });
 function cleanup() {

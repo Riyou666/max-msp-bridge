@@ -15,12 +15,17 @@ const definitions=[
   ['max_status','Read session, pending operations and recent request outcomes. No patch mutation.',{},[],true],
   ['max_inspect','Read graph IDs and a single-use revision. Also reconciles expired pending requests after successful readback.',{...common},['session'],true],
   ['max_create','Create one named Max object at coordinates. Object initialization may have side effects.',{...common,name:str,object:str,args:atoms,x:num,y:num},['session','name','object','args','x','y']],
-  ['max_connect','Connect named objects and verify the actual patchcord.',{...common,source:str,outlet:{type:'integer',minimum:0},destination:str,inlet:{type:'integer',minimum:0}},['session','source','outlet','destination','inlet']],
-  ['max_disconnect','Disconnect a specific patchcord and verify it.',{...common,source:str,outlet:{type:'integer',minimum:0},destination:str,inlet:{type:'integer',minimum:0}},['session','source','outlet','destination','inlet']],
-  ['max_move','Move one object, preserving its dimensions.',{...common,name:str,x:num,y:num},['session','name','x','y']],
-  ['max_setvalue','Set a numeric UI/object value and return readback.',{...common,name:str,value:num},['session','name','value']],
-  ['max_send','Send bang/int/float/list/set to a named object; can trigger connected behavior.',{...common,name:str,selector:{type:'string',enum:['bang','int','float','list','set']},args:atoms},['session','name','selector','args']],
-  ['max_remove','Remove an object created by this receiver session, including its cords.',{...common,name:str},['session','name']],
+  ['max_connect','Connect objects by ID or unique varname and verify the actual patchcord.',{...common,source:str,sourceId:str,outlet:{type:'integer',minimum:0},destination:str,destinationId:str,inlet:{type:'integer',minimum:0}},['session','outlet','inlet']],
+  ['max_disconnect','Disconnect a specific patchcord and verify it.',{...common,source:str,sourceId:str,outlet:{type:'integer',minimum:0},destination:str,destinationId:str,inlet:{type:'integer',minimum:0}},['session','outlet','inlet']],
+  ['max_move','Move one object, preserving its dimensions.',{...common,name:str,objectId:str,x:num,y:num},['session','x','y']],
+  ['max_setvalue','Set a numeric UI/object value and return readback.',{...common,name:str,objectId:str,value:num},['session','value']],
+  ['max_send','Send bang/int/float/list/set to an object by ID or varname; can trigger connected behavior.',{...common,name:str,objectId:str,selector:{type:'string',enum:['bang','int','float','list','set']},args:atoms},['session','selector','args']],
+  ['max_remove','Remove an object created by this receiver session, including its cords.',{...common,name:str,objectId:str},['session']],
+  ['max_console','Read current global Max Console history without opening its window. Does not clear messages.',{session:str,limit:{type:'integer',minimum:1},contains:str},['session'],true],
+  ['max_preferences','Read Max application attributes exposed by its native API. No Preferences window or changes.',{session:str,names:{type:'array',items:str,maxItems:512}},['session'],true],
+  ['max_audio_status','Read audio/DSP settings and available choices through adstatus without opening Audio Status.',{session:str,settings:{type:'array',items:str,maxItems:16}},['session'],true],
+  ['max_audio_set','Change an explicitly requested application-wide audio setting; requires current setting value and patch revision. May affect playback in all projects.',{...common,setting:{type:'string',enum:['switch','sr','sigvs','iovs','overdrive','takeover','cpulimit']},value:num,expectedValue:num},['session','setting','value','expectedValue']],
+  ['max_bridge_restart','Restart only this host bridge, without UI actions or closing the patch. Reconnect and inspect afterward.',{...common},['session']],
   ['max_reference','Read installed Max XML reference with source path and checksum.',{name:str,domain:str},['name'],true]
 ];
 for(const definition of definitions) {
@@ -42,6 +47,13 @@ function validateArgs(schema,a) {
 export async function callTool(name,args={}) {
   const tool=tools.find(t=>t.name===name);if(!tool)throw Error(`Unknown tool: ${name}`);
   validateArgs(tool.inputSchema,args);
+  if(['max_move','max_setvalue','max_send','max_remove'].includes(name)) {
+    if(('name' in args)===('objectId' in args))throw Error('Supply exactly one of name or objectId');
+  }
+  if(['max_connect','max_disconnect'].includes(name)) {
+    for(const [n,id] of [['source','sourceId'],['destination','destinationId']])if((n in args)===(id in args))throw Error(`Supply exactly one of ${n} or ${id}`);
+  }
+  if(name==='max_console' && (args.limit||100)>500)throw Error('Console limit cannot exceed 500 lines');
   if(name==='max_reference') {
     if(!process.env.MAX_ROOT)throw Error('Set MAX_ROOT to the installed Max folder');
     const argv=['-NoProfile','-File',path.join(here,'..','scripts','reference.ps1'),'-MaxRoot',process.env.MAX_ROOT,'-Name',args.name];
@@ -55,7 +67,7 @@ export async function callTool(name,args={}) {
   catch {throw Error('Max bridge is offline. Open max-control.maxpat in Max and start its node.script.');}
   if(state.port!==port)throw Error('Bridge state port mismatch');
   const status=name==='max_status';
-  if(!status && state.version!=='0.2.0')throw Error('Bridge version mismatch: stop the Max bridge, update all bridge files and restart it before editing.');
+  if(!status && state.version!=='0.3.0')throw Error('Bridge version mismatch: stop the Max bridge, update all bridge files and restart it before editing.');
   const requestId=crypto.randomUUID();
   let response;
   try {response=await fetch(`http://127.0.0.1:${port}/${status?'status':'call'}`,{
@@ -75,7 +87,7 @@ export async function rpc(message) {
     if(message.method==='initialize') {
       const supported=['2024-11-05','2025-03-26','2025-06-18','2025-11-25'];
       const requested=message.params?.protocolVersion;
-      result={protocolVersion:supported.includes(requested)?requested:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'max-windows',version:'0.2.0'}};
+      result={protocolVersion:supported.includes(requested)?requested:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'max-windows',version:'0.3.0'}};
     } else if(message.method==='ping')result={};
     else if(message.method==='tools/list')result={tools};
     else if(message.method==='tools/call') {

@@ -7,6 +7,16 @@ description: Build, inspect, debug and edit Cycling '74 Max/MSP patches on Windo
 
 Turn the user's musical or interaction intent into a readable, working Max patch. Use installed-version evidence and actual patch state. This skill supports file editing without a live connection and live editing through `max_windows` MCP when connected.
 
+## Background-only operation
+
+Use the bridge and native Max APIs for debugging. Do not fall back to Computer Use, window scraping, clicks, keyboard injection, or closing/reopening the user's project to work around a missing tool. If disconnected or unsupported, report the exact missing capability and continue independent work; do not silently automate the UI.
+
+Read `max_console` for current global Console history, `max_preferences` for exposed application attributes, and `max_audio_status` for audio settings. These do not require opening windows. Console history is global, not project-scoped. Change audio settings with `max_audio_set` only when the user requested that setting; it affects the application, not just one patch. General preference writes and driver/device changes are not implemented.
+
+Use runtime `objectId`, `sourceId`, and `destinationId` returned by inspection to edit unnamed objects. Do not rename user objects merely to address them. Existing unique varnames, including punctuation, also work. A scope item may be a subpatcher's runtime ID. IDs expire on receiver reload; inspect again. Removal still requires bridge creation ownership.
+
+For a live upgrade from a repository checkout, use `scripts/upgrade-live.mjs --apply --patch '<exact connected host path>'`; it backs up the installed skill, reloads the receiver and restarts only the bridge through native APIs. Use `max_bridge_restart` for later restarts. Reload the Codex MCP client to discover changed tool schemas. Neither operation saves or rewrites the project.
+
 ## Start with context
 
 Identify the target file or bridge session, Max version, standalone versus Max for Live, and requested change. Preserve the user's layout and working signal paths. Clarify only missing choices that materially affect the result.
@@ -17,7 +27,7 @@ Consult [Windows and object lookup](references/windows.md) for paths, port metad
 
 ## Choose the execution route
 
-- **Connected live patch:** call `max_status`, then `max_inspect`. Use the returned session ID in every mutation. Before each mutation, inspect its scope and pass the returned `revision` as `expectedRevision`; reconsider the action if state changed. Never silently refresh a rejected precondition and replay the same write. Read [live control](references/live-control.md). No tool availability means no live connection; never invent MCP calls.
+- **Connected live patch:** call `max_status`, then `max_inspect`. Use the returned session ID in every mutation. Before each mutation, inspect its scope and pass the returned `revision` as `expectedRevision`; reconsider the action if state changed. Never silently refresh a rejected precondition and replay the same write. Read [live control](references/live-control.md). If native MCP tools are not loaded, the bundled `callTool` API can use the same authenticated bridge through Node; report this route explicitly. Do not invent tool calls or infer a connection without readback.
 - **Files:** read the complete target JSON and dependencies before editing. Keep unknown fields, object IDs, patchline order, varnames and presentation attributes. Write a new file or a backup before replacing an existing one. Never overwrite an unsaved open patch from disk.
 - **Documentation:** query local `.maxref.xml`, `.maxhelp`, `.maxsnip` and examples for the installed version. Use Cycling '74 online reference if the local material is incomplete. A local XML placeholder such as TEXT_HERE is missing evidence, not a fact.
 

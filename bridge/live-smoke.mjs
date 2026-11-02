@@ -29,7 +29,7 @@ async function tool(name,args={}){
 try {
   assert.ok((await request('initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'max-live-smoke',version:'1'}})).result);
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
-  assert.equal((await request('tools/list',{})).result.tools.length,10);
+  assert.equal((await request('tools/list',{})).result.tools.length,15);
   const {session}=await tool('max_status');const context={session,scope:['workspace']};
   const root=await tool('max_inspect',{session});
   assert.equal(path.resolve(root.result.filepath).replaceAll('\\','/').toLowerCase(),expectedPatch,'Wrong host patch; refusing mutation');

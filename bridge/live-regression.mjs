@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 const patchArg=process.argv.indexOf('--patch');
 if(!process.argv.includes('--demo')||patchArg<0||!process.argv[patchArg+1])throw Error('Requires --demo --patch <test patch>; run after live-smoke on an isolated demo.');
 const expected=path.resolve(process.argv[patchArg+1]).replaceAll('\\','/').toLowerCase();
-const status=await callTool('max_status');assert.equal(status.version,'0.2.0');
+const status=await callTool('max_status');assert.equal(status.version,'0.3.0');
 const ctx={session:status.session,scope:['workspace']};
 const root=await callTool('max_inspect',{session:status.session});assert.equal(path.resolve(root.result.filepath).replaceAll('\\','/').toLowerCase(),expected,'Wrong host patch');
 const inspect=async()=> (await callTool('max_inspect',ctx)).result;

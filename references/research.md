@@ -44,3 +44,13 @@ Final installation verification: the official skill validator passed for both st
 The revised bridge passed 15 automated tests, including object replacement, graph identity, state preconditions and timeout recovery with simulated transport timing. A separate Max 9.2 host on an isolated port passed 37 MCP tool calls and real arithmetic propagation. Additional live tests used an in-patch fixture to remove and replace a bridge-created object with the same name: deletion was rejected. Two unnamed objects retained distinct IDs with correctly identified cord endpoints, and a stale revision was rejected after another edit. Audio and real scheduler-stall recovery were not tested.
 
 To reproduce live checks, generate a fresh isolated host with `prepare-demo.mjs`, open it in Max, verify its port, then run `node bridge/live-smoke.mjs --demo --patch <absolute-test-patch>` followed by `node bridge/live-regression.mjs --demo --patch <absolute-test-patch>`. These intentionally mutate only the exact path checked before execution. The second check leaves a protected replacement and unnamed objects in the disposable test patch.
+
+## 0.3.0 background debugging validation
+
+Twenty-three automated tests cover unnamed ID selection, scope boundaries, punctuated/ambiguous varnames, stale IDs, native-wrapper reuse simulation, ownership markers, bounded Console tail reads, and audio-setting compare-before-write behavior, in addition to earlier regressions.
+
+On Max 9.2, the 37-call smoke test and replacement regression passed on a disposable host. `live-background.mjs` then connected and disconnected unnamed objects by ID, observed control propagation without renaming, captured a unique printed marker from the global Console, read native Preferences/audio status, and verified same-value audio writes are no-ops and stale values are rejected. The restart tool changed the bridge session without closing the host. No GUI automation was used.
+
+The installed bridge was hot-upgraded while its actual project remained open. Graph comparison before/after reported unchanged objects and patchcords. Read-only Console, Preferences and audio queries passed on that host. Actual audio-setting changes were unit-tested with mocks; the live test deliberately left global audio settings unchanged. This is not an audio-quality test or proof of support for all Preferences panels.
+
+An additional Max-specific limitation was found during testing: native wrappers may be reused after delete/recreate. Reference equality alone is insufficient for creation ownership. New bridge-created objects now receive an annotation ownership marker, which is checked along with their runtime reference. Existing user objects are neither annotated nor renamed.

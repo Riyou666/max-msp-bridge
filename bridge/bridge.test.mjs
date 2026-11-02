@@ -9,10 +9,10 @@ import {validate} from '../scripts/maxpat.mjs';
 
 test('MCP initialization, tool discovery, notifications and unknown method',async()=>{
   assert.equal((await rpc({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}})).result.protocolVersion,'2024-11-05');
-  assert.equal((await rpc({jsonrpc:'2.0',id:2,method:'tools/list'})).result.tools.length,10);
+  assert.equal((await rpc({jsonrpc:'2.0',id:2,method:'tools/list'})).result.tools.length,15);
   assert.equal(await rpc({jsonrpc:'2.0',method:'notifications/initialized'}),null);
   assert.equal((await rpc({jsonrpc:'2.0',id:3,method:'unknown'})).error.code,-32601);
-  assert.equal(new Set(tools.map(t=>t.name)).size,10);
+  assert.equal(new Set(tools.map(t=>t.name)).size,15);
 });
 test('invalid mutation arguments fail before contacting bridge',async()=>{
   const r=await rpc({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'max_create',arguments:{session:'x'}}});

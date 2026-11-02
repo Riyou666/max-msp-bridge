@@ -73,7 +73,7 @@ Codex can help add the bridge. Provide the full file path, whether it is open in
 
 > Add only the max-msp-windows bridge to `<full-path-to-existing-project.maxpat>`. Its current open/save state is: `<describe state>`. Check for an existing bridge and make a backup first. Preserve existing objects, connections, layout and audio logic; do not complete the project for me. Never overwrite an open patch with unsaved edits from disk; prepare a separate copy if needed. Verify the connected file path and scope afterward.
 
-**There is currently no one-click interface that automatically takes control of any open project.** Depending on the file's state, Codex can prepare a separate copy with the bridge or use the Max interface where supported. These setup actions cannot be performed automatically by an MCP bridge that is not yet connected to the target.
+**There is currently no one-click interface that automatically takes control of any open project.** Depending on the file's state, Codex can prepare a separate copy with the bridge without overwriting an open unsaved patch. These setup actions cannot be performed automatically by an MCP bridge that is not yet connected to the target.
 
 To connect a project manually:
 
@@ -103,11 +103,11 @@ You can continue using Max. While Codex modifies an area, pause your edits there
 
 ## Tools and boundaries
 
-`max_status`, `max_inspect`, `max_create`, `max_connect`, `max_disconnect`, `max_move`, `max_setvalue`, `max_send`, `max_remove`, `max_reference`.
+`max_status`, `max_inspect`, `max_create`, `max_connect`, `max_disconnect`, `max_move`, `max_setvalue`, `max_send`, `max_remove`, `max_reference`, `max_console`, `max_preferences`, `max_audio_status`, `max_audio_set`, `max_bridge_restart`.
 
-Version 0.2.0: mutations require named objects, a current session, and the latest inspection revision for the selected scope (`expectedRevision`). A changed inspected state rejects the write. Default scope is the host root; explicitly select your intended subpatcher. Removal is limited to actual object instances created in that receiver session; a same-name replacement is protected. There is no general eval, transactional undo, save endpoint, global console capture or audio analyzer. UI interaction may still be needed for actions outside these tools. Live audio/DSP correctness is a separate check.
+Version 0.3.0: mutations accept runtime object IDs or unique existing varnames and require a current session, and the latest inspection revision for the selected scope (`expectedRevision`). A changed inspected state rejects the write. Default scope is the host root; explicitly select your intended subpatcher. Removal is limited to actual object instances created in that receiver session; a same-name replacement is protected. There is no general eval, transactional undo, save endpoint or audio analyzer. Unsupported operations are reported explicitly; the skill does not fall back to Computer Use. Live audio/DSP correctness is a separate check.
 
-The service binds to loopback, uses a per-start token and serializes requests. This is a local same-user bridge, not a sandbox for arbitrary Max objects or a remote service. No runtime credentials or generated machine-specific patches are bundled.
+The service binds to loopback, uses a per-start token and serializes requests. Created objects carry an ownership marker in their annotation; existing user objects are not renamed or annotated. This is a local same-user bridge, not a sandbox for arbitrary Max objects or a remote service. No runtime credentials or generated machine-specific patches are bundled.
 
 ## Validation
 
@@ -120,8 +120,24 @@ The structural validator does not establish object availability or audio correct
 
 See [live control](references/live-control.md), [Windows setup](references/windows.md), and [research and provenance](references/research.md). Architecture was informed by MAX-MSP_CC_Framework, MaxMCP and tdmcp; this is an independent implementation, not their Windows distribution.
 
-## Updating from 0.1.0
+## Background debugging (0.3.0)
 
-Stop the bridge before replacing files. Back up the installed skill, then replace its `SKILL.md`, `agents`, `bridge`, `references`, and `scripts` from this repository. Keep your existing Codex registration. Restart the Max bridge and reload Codex MCP; check `max_status.version` is `0.2.0`. Mixing a new receiver with an old MCP client will reject writes because revisions are now mandatory. The fresh-install script intentionally refuses existing installations.
+Unnamed objects can now be connected, moved and sent supported messages through their runtime IDs. Read Console history with `max_console`, exposed application preferences with `max_preferences`, and audio status with `max_audio_status`. These calls do not open or manipulate windows. Console history is global; it may include messages from other projects.
 
-0.2.0 adds runtime graph IDs, object-identity removal guards, single-use state preconditions, and timeout recovery through explicit readback. It does not add transactional undo, audio verification or fully concurrent collaborative editing. See [failure semantics](references/live-control.md#failure-semantics).
+`max_audio_set` supports explicit changes to DSP on/off, sample rate, signal/I/O vector sizes, Overdrive, Scheduler in Audio Interrupt and CPU limit. It checks the prior value and reads back the result. Audio settings are application-wide. Device selection and arbitrary Preferences writes are not supported. The skill reports missing capabilities instead of silently switching to Computer Use.
+
+## Updating an existing live installation
+
+From a separate, updated repository checkout, run:
+
+```powershell
+node scripts/upgrade-live.mjs --apply --patch 'E:\MyMaxProjects\Assignment01.maxpat'
+```
+
+Use the exact path of the currently connected host. The updater checks that path, backs up the installed skill under `$HOME\.codex\backups\max-msp-windows`, replaces runtime files, waits for the receiver to reload, and restarts only the bridge through Max APIs. It does not close the project, edit its file, change Codex configuration, or use Computer Use. If the receiver does not reload or the bridge is disconnected, it reports the failure without automating the UI. The updater must run from a checkout separate from the installed skill.
+
+Reload Codex MCP after updating to discover the new tools. Verify `max_status.version` and `max_inspect.result.receiverVersion` are both `0.3.0`. Runtime object IDs and revision tokens from before the upgrade are invalid. Keep the backup until verification is complete.
+
+For a stopped installation, back it up and replace `SKILL.md`, `agents`, `bridge`, `references`, and `scripts` manually, then start the bridge. The fresh-install script intentionally refuses existing installations.
+
+See [live control and failure semantics](references/live-control.md) for exact tool arguments and limitations.
