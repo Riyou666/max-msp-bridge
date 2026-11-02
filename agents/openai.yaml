@@ -1,0 +1,4 @@
+interface:
+  display_name: "Max/MSP Windows"
+  short_description: "Build and control Max patches on Windows with live verification"
+  default_prompt: "Use $max-msp-windows to inspect my Max patch and implement the requested change with readback verification."

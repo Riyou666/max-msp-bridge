@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+.env
+.env.*
+*.bak
+/max-control.maxpat
+/live-verification.json
+codex-max-bridge-*.json
+.validation-deps/
